@@ -18,7 +18,137 @@ Bu proje, üretim süreçlerindeki kalite kontrol kararlarını (Kabul, RTV, Hur
 - **Analizler:** PCA, Kümeleme (K-Means), Anomali Tespiti (Isolation Forest).
 - **Optimizasyon:** Hibrit Karar Modeli (COPQ, Kapasite ve Akış dengeli).
 
-## Nasıl Çalıştırılır?
+# QAISU Workbench (Streamlit) – Setup & Run Guide
+
+Bu repo, kalite karar destek sistemi için bir 
+**Streamlit arayüzü (app.py)
+** + arka planda çalışan 
+**ML + optimizasyon motoru (engine.py)** içerir.
+
+---
+
+## 1) Gereksinimler
+
+### Çalışma Ortamı
+- **Python:** 3.10+ (öneri: 3.10 veya 3.11)
+- **OS:** macOS / Windows / Linux
+- **Disk/RAM:** Dataset boyutuna bağlı (30–50MB üstü excel’lerde RAM artar)
+---
+
+## 2) Versiyon Notları
+
+- Python 3.10 / 3.11
+- streamlit 1.38.0
+- pandas 2.2.2
+- scikit-learn 1.5.1
+
+
+## 3) Kurulum (Adım Adım)
+
+### A) Repo’yu indirin
+
+```bash
+git clone <REPO_URL>
+cd <REPO_FOLDER>
+```
+
+### B) Virtual environment oluşturun (Önerilir)
+
+**macOS / Linux**
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+```
+
+**Windows (PowerShell)**
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+### C) Paketleri yükleyin
+
+#### Önerilen `requirements.txt`
+
+```txt
+streamlit==1.38.0
+pandas==2.2.2
+numpy==2.0.1
+scikit-learn==1.5.1
+altair==5.4.1
+matplotlib==3.9.2
+openpyxl==3.1.5
+pulp==2.9.0
+xgboost==2.1.1
+```
+
+Kurulum:
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+> Eğer `xgboost` kurulumunda hata alırsanız, bu satırı kaldırıp tekrar kurabilirsiniz.
+
+---
+
+## 4) Uygulamayı Çalıştırma
+
+```bash
+streamlit run app.py
+```
+
+Tarayıcıdan açın:
+```
+http://localhost:8501
+```
+
+---
+
+## 5) Kullanım Akışı
+
+### Data & Exploration
+- Dataset yükleme (.xlsx / .csv)
+- Preview, kolon seçimi, histogram / bar chart / boxplot
+
+### Modeling Studio
+- Model seçimi (RF / XGB / Logistic)
+- Train & Evaluate
+- Metrikler, Confusion Matrix, Feature Importance
+
+### Decisions & Export
+- Generate Decisions
+- Sonuç tablosu
+- CSV export (Superset uyumlu)
+
+---
+
+## 6) Sık Karşılaşılan Hatalar
+
+### “No labeled rows for training”
+- `NIHAI_KARAR` kolonu tamamen boş olabilir.
+
+### XGBoost hatası
+- requirements.txt içinden kaldırılabilir.
+
+### Excel okunamıyor
+```bash
+pip install openpyxl
+```
+
+---
+
+## 7) Kullanılan Teknolojiler
+
+- Streamlit
+- Pandas / NumPy
+- Scikit-learn
+- PuLP (Optimizasyon)
+- Altair & Matplotlib
+- XGBoost 
+
+## Dashboardsuz çalıştırmak için: 
 1. Bağımlılıkları yükleyin: pip install -r requirements.txt
 
 2. Kodu çalıştırın: Herhangi bir notebooktan .py dosyasını açıp ana fonksiyondan INPUT_FILE ismini sizin veri setinizle uyumlu yapmanız ve yüklediğiniz datasetinde NIHAI_KARAR adlı bir sütun bulunması (Kabul, RTV, Hurda vb. satırlarla doldurulmuş) gerekmektedir.
