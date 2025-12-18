@@ -1,4 +1,4 @@
-# ENS 491/2 Repository: QAISU v Roketsan
+# ENS 491/2 Repository
 
 ### QAISU - Kalite Karar Destek Sistemi (Model 1)
 Bu model, üretim süreçlerindeki kalite kontrol kararlarını (Kabul, RTV, Hurda vb.) optimize etmek için Makine Öğrenmesi ve Yöneylem Araştırması tekniklerini birleştirir.
