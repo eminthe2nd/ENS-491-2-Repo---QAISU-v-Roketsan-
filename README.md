@@ -1,7 +1,7 @@
 # ENS 491/2 Repository: QAISU v Roketsan
 
-### QAISU - Kalite Karar Destek Sistemi (Model 1) (Roketsan için)
-Bu proje, üretim süreçlerindeki kalite kontrol kararlarını (Kabul, RTV, Hurda vb.) optimize etmek için Makine Öğrenmesi ve Yöneylem Araştırması tekniklerini birleştirir.
+### QAISU - Kalite Karar Destek Sistemi (Model 1)
+Bu model, üretim süreçlerindeki kalite kontrol kararlarını (Kabul, RTV, Hurda vb.) optimize etmek için Makine Öğrenmesi ve Yöneylem Araştırması tekniklerini birleştirir.
 
 ## Özellikler
 - **ML Modelleri:** Random Forest, XGBoost, Logistic Regression.
