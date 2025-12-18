@@ -42,7 +42,6 @@ Bu repo, kalite karar destek sistemi için bir
 - pandas 2.2.2
 - scikit-learn 1.5.1
 
-
 ## 3) Kurulum (Adım Adım)
 
 ### A) Repo’yu indirin
