@@ -6,6 +6,21 @@ from datetime import datetime
 
 app = Flask(__name__)
 
+def aksiyon_oner(anomali_skoru, isko_orani, vir_kayit_var_mi, optimize_edilmis_karar, tedarikci_anomali=None):
+    if optimize_edilmis_karar == 'Hurda':
+        if vir_kayit_var_mi:
+            return 'SCAR AC', '⚠️ Karma (Tedarik Agirlikli): Kotu hammadde hatta yansıyor. Tedarikçiye SCAR acin.', 'YUKSEK'
+        return 'CAPA AC', '🔧 Uretim Kaynakli: Proses parametrelerini gozden gecirin. CAPA baslatin.', 'ORTA'
+    elif optimize_edilmis_karar == 'Islah':
+        return 'ISLAH + IZLE', '🔨 Parca kurtarilabilir. Islah sonrasi yeniden muayene yapin.', 'ORTA'
+    elif optimize_edilmis_karar == 'RTV':
+        return 'TEDARIKCI IADE', '📦 Parcayi tedarikçiye iade edin ve 8D raporu talep edin.', 'YUKSEK'
+    elif optimize_edilmis_karar == 'RU':
+        return 'KOSULLU KABUL', '📋 Parca derogasyon kapsaminda kullanilabilir. Muhendislik onayi alin.', 'ORTA'
+    else:
+        return 'KABUL', '✅ Normal Akis: Parca standart kalite kriterlerini karsilayor.', 'NORMAL'
+
+
 KARAR_ETIKETLERI = {
     'Roketsan da değerlendirilecek': "Roketsan'da değiştirilecek",
 }
@@ -183,6 +198,7 @@ HTML_INDEX = """
     <div class="tabs">
         <button class="tab active" onclick="switchTab('udf', this)">UDF Kararları ({{ udf_toplam }})</button>
         <button class="tab" onclick="switchTab('vir', this)">VIR Kararları ({{ vir_toplam }})</button>
+        <button class="tab" onclick="window.open('/dashboard', '_blank')" style="background:#2980b9;color:white;">📊 Grafikler</button>
     </div>
 
     <!-- UDF TABLOSU -->
@@ -655,6 +671,67 @@ h2{color:#27ae60;}p{color:#666;}</style>
 </html>
 """
 
+
+HTML_DASHBOARD = """
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>QAISU — Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        .header { background: #1a1a2e; color: white; padding: 16px 40px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; font-size: 20px; }
+        .header a { color: #aaa; text-decoration: none; font-size: 13px; }
+        .container { max-width: 1400px; margin: 24px auto; padding: 0 20px; }
+        .stats { display: flex; gap: 16px; margin-bottom: 24px; }
+        .stat-card { background: white; padding: 16px 20px; border-radius: 8px; flex: 1; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+        .stat-card h3 { margin: 0 0 4px; color: #666; font-size: 12px; text-transform: uppercase; }
+        .stat-card .value { font-size: 28px; font-weight: bold; color: #1a1a2e; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .chart-card { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); margin-bottom: 20px; }
+        .chart-card h2 { margin: 0 0 16px; font-size: 15px; color: #1a1a2e; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>📊 QAISU — Analitik Dashboard</h1>
+    <a href="/">← Ana Sayfaya Dön</a>
+</div>
+<div class="container">
+    <div class="stats">
+        <div class="stat-card"><h3>UDF Toplam</h3><div class="value">{{ stats.udf_toplam }}</div></div>
+        <div class="stat-card"><h3>Uyuşmazlık</h3><div class="value" style="color:#e74c3c">{{ stats.uyusmazlik }}</div></div>
+        <div class="stat-card"><h3>Optimizasyon Oranı</h3><div class="value" style="color:#27ae60">%{{ stats.opt_oran }}</div></div>
+        <div class="stat-card"><h3>Ort. İSKO</h3><div class="value" style="color:#2980b9">%{{ stats.isko_ort }}</div></div>
+        <div class="stat-card"><h3>VIR Toplam</h3><div class="value" style="color:#8e44ad">{{ stats.vir_toplam }}</div></div>
+    </div>
+    <div class="grid-2">
+        <div class="chart-card"><h2>🥧 Karar Uyuşmazlığı Özeti</h2><div id="pie-chart"></div></div>
+        <div class="chart-card"><h2>🎯 İSKO Oranı Takibi</h2><div id="gauge-chart"></div></div>
+    </div>
+    <div class="chart-card"><h2>🔥 Karar Dönüşüm Matrisi (İnsan Kararı → AI Kararı)</h2><div id="heatmap-chart"></div></div>
+    <div class="chart-card"><h2>⚠️ Tedarikçi Risk Haritası</h2><div id="bar-chart"></div></div>
+</div>
+<script>
+var pie_data = {{ pie_data | tojson }};
+var gauge_val = {{ gauge_data.value }};
+var heatmap_data = {{ heatmap_data | tojson }};
+var bar_data = {{ bar_data | tojson }};
+
+Plotly.newPlot('pie-chart', [{type:'pie', labels:pie_data.labels, values:pie_data.values, hole:0.4, marker:{colors:['#3498db','#e74c3c']}}], {margin:{t:10,b:10,l:10,r:10}, height:300});
+
+Plotly.newPlot('gauge-chart', [{type:'indicator', mode:'gauge+number+delta', value:gauge_val, delta:{reference:90}, gauge:{axis:{range:[0,100]}, bar:{color:'#2980b9'}, steps:[{range:[0,70],color:'#fdecea'},{range:[70,90],color:'#fff3e0'},{range:[90,100],color:'#e8f5e9'}], threshold:{line:{color:'#27ae60',width:4},thickness:0.75,value:90}}, title:{text:'İSKO Oranı (%)'}}], {margin:{t:40,b:10,l:30,r:30}, height:300});
+
+Plotly.newPlot('heatmap-chart', [{type:'heatmap', z:heatmap_data.z, x:heatmap_data.x, y:heatmap_data.y, colorscale:'Blues'}], {margin:{t:10,b:80,l:100,r:10}, height:380, xaxis:{title:'AI Kararı'}, yaxis:{title:'İnsan Kararı'}});
+
+Plotly.newPlot('bar-chart', [{type:'bar', x:bar_data.tedarikci, y:bar_data.anomali, marker:{color:'#3498db'}}], {margin:{t:10,b:120,l:60,r:10}, height:400, xaxis:{title:'Tedarikçi', tickangle:-45}, yaxis:{title:'Ort. Anomali Skoru', range:[0,1]}});
+</script>
+</body>
+</html>
+"""
+
 # ============================================================
 # ROUTES
 # ============================================================
@@ -662,8 +739,8 @@ h2{color:#27ae60;}p{color:#666;}</style>
 def index():
     engine = get_engine()
     with engine.connect() as con:
-        udf_rows = pd.read_sql('SELECT * FROM superset_udf_karar_raporu ORDER BY "A_i_Anomali_Skoru" DESC LIMIT 50', con)
-        vir_rows = pd.read_sql('SELECT * FROM superset_vir_risk_raporu ORDER BY "A_i_Anomali_Skoru" DESC LIMIT 50', con)
+        udf_rows = pd.read_sql('SELECT * FROM superset_udf_karar_raporu LIMIT 50', con)
+        vir_rows = pd.read_sql('SELECT * FROM superset_vir_risk_raporu LIMIT 50', con)
         udf_toplam = pd.read_sql("SELECT COUNT(*) as c FROM superset_udf_karar_raporu", con).iloc[0]['c']
         vir_toplam = pd.read_sql("SELECT COUNT(*) as c FROM superset_vir_risk_raporu", con).iloc[0]['c']
         udf_uyusmazlik = pd.read_sql('SELECT COUNT(*) as c FROM superset_udf_karar_raporu WHERE "KARAR_UYUSMAZLIGI"=\'Uyuşmazlık Var\'', con).iloc[0]['c']
@@ -686,88 +763,56 @@ def index():
 def karar_detay(udf_no):
     engine = get_engine()
     with engine.connect() as con:
-        df = pd.read_sql('SELECT * FROM superset_udf_karar_raporu WHERE "UDF_NO"=' + str(udf_no), con)
+        df = pd.read_sql(text('SELECT * FROM superset_udf_karar_raporu WHERE "UDF_NO"=:uid'), con, params={'uid': udf_no})
     if df.empty:
         return "Kayıt bulunamadı", 404
     row = df.iloc[0]
 
-    # P_c_ kolonlarını bul ve olasılık barı oluştur
-    renk_map = {
-        'Hurda': 'prob-kirmizi',
-        'RTV': 'prob-turuncu',
-        'RU': 'prob-turuncu',
-        'Islah': 'prob-sari',
-        'Kabul/OGK': 'prob-yesil',
-    }
+    # VIR gecmisi
+    kalem_kodu = str(row.get('KALEM', ''))
+    with engine.connect() as con2:
+        df_vir = pd.read_sql(text('SELECT * FROM superset_vir_risk_raporu WHERE "KALEM"=:kalem'), con2, params={'kalem': kalem_kodu})
+    vir_gecmis = df_vir.to_dict('records') if not df_vir.empty else []
+
+    # P_c_ olasiliklar
+    renk_map = {'Hurda': 'prob-kirmizi', 'RTV': 'prob-turuncu', 'RU': 'prob-turuncu', 'Islah': 'prob-sari', 'Kabul/OGK': 'prob-yesil'}
     probs = []
     for col in df.columns:
         if col.startswith('P_c_'):
             label = col.replace('P_c_', '')
-            val = float(row[col]) if row[col] is not None else 0.0
-            probs.append({
-                'label': label,
-                'pct': round(val * 100, 1),
-                'renk': renk_map.get(label, 'prob-mavi')
-            })
+            val = float(row.get(col, 0) or 0)
+            probs.append({'label': label, 'pct': round(val * 100, 1), 'renk': renk_map.get(label, 'prob-mavi')})
     probs = sorted(probs, key=lambda x: x['pct'], reverse=True)
 
-    # VIR geçmişi — aynı kalemin VIR kayıtlarını çek
-    kalem_kodu = str(row['KALEM'])
-    with get_engine().connect() as con:
-        df_vir_gecmis = pd.read_sql(
-            "SELECT * FROM superset_vir_risk_raporu WHERE \"KALEM\"='" + kalem_kodu + "'",
-            con
-        )
-    vir_gecmis = df_vir_gecmis.to_dict('records') if not df_vir_gecmis.empty else []
+    # XAI
+    anomali = float(row.get('A_i_Anomali_Skoru', 0) or 0)
+    isko = float(row.get('ISKO_ORANI', 0.5) or 0.5)
+    raw_m = 0.10 + 0.20 * (1 - isko)
+    raw_t = 0.10 + 0.20 * (1.0 if vir_gecmis else 0.0)
+    raw_a = 0.20 * anomali
+    toplam = raw_m + raw_t + raw_a or 1
+    xai = {'maliyet': round((raw_m/toplam)*100), 'tedarikci': round((raw_t/toplam)*100), 'anomali': round((raw_a/toplam)*100)}
+    fark = 100 - sum(xai.values())
+    xai['maliyet'] += fark
 
-    # XAI — Optimizasyon ağırlıklarından gerekçe yüzdelerini hesapla
-    # w1=0.10 maliyet, w2=0.40 ML, w3=0.20 risk, w4=0.20 anomali, w5=0.10 tedarikçi
-    anomali_skoru = float(row['A_i_Anomali_Skoru']) if row['A_i_Anomali_Skoru'] else 0.0
-    vir_varsa = 1.0  # M_cross etkisi — VIR kaydı varsa tedarikçi riski yüksek
-
-    raw_maliyet = 0.10 + 0.20 * (1 - float(row['ISKO_ORANI']) if row['ISKO_ORANI'] else 0.5)
-    raw_tedarikci = 0.10 + 0.20 * vir_varsa
-    raw_anomali = 0.20 * anomali_skoru
-
-    toplam = raw_maliyet + raw_tedarikci + raw_anomali
-    if toplam > 0:
-        xai = {
-            'maliyet': round((raw_maliyet / toplam) * 100),
-            'tedarikci': round((raw_tedarikci / toplam) * 100),
-            'anomali': round((raw_anomali / toplam) * 100),
-        }
-        # Toplamı 100 yap
-        fark = 100 - sum(xai.values())
-        xai['maliyet'] += fark
-    else:
-        xai = {'maliyet': 45, 'tedarikci': 35, 'anomali': 20}
-
-    # Erken uyarı rozetleri
-    anomali = float(row['A_i_Anomali_Skoru']) if row['A_i_Anomali_Skoru'] else 0.0
-    isko = float(row['ISKO_ORANI']) if row['ISKO_ORANI'] else 0.5
-
+    # Alerts
     alert_tedarikci = None
     alert_kronik = None
-
-    # VIR geçmişi varsa tedarikçi uyarısı
     if vir_gecmis:
-        vir_anomali_ort = sum(float(v['A_i_Anomali_Skoru']) for v in vir_gecmis) / len(vir_gecmis)
+        vir_anomali_ort = sum(float(v.get('A_i_Anomali_Skoru', 0) or 0) for v in vir_gecmis) / len(vir_gecmis)
         tedarikci_adi = vir_gecmis[0].get('Tedarikçi', 'Bu tedarikçi')
         risk_pct = round(vir_anomali_ort * 100)
-        alert_tedarikci = f"DİKKAT: {tedarikci_adi} tedarikçisinin parçalarının gelecek 6 ayda %{risk_pct} oranında red yeme riski (Yüksek Anomali) bulunmaktadır."
+        alert_tedarikci = f"⚠️ DİKKAT: {tedarikci_adi} tedarikçisinin parçalarının gelecek 6 ayda %{risk_pct} oranında red yeme riski bulunmaktadır."
+    if anomali > 0.6 and len(vir_gecmis) >= 2:
+        alert_kronik = "⚠️ KRONİK RİSKLİ PARÇA: Bu parçada hem üretim hem tedarik hatası yüksektir."
 
-    # Hem anomali hem VIR varsa kronik risk
-    if anomali > 0.6 and vir_gecmis and len(vir_gecmis) >= 2:
-        alert_kronik = "KRONİK RİSKLİ PARÇA: Bu parçada hem üretim hem tedarik hatası yüksektir."
-
-    # Aksiyon önerisi
-    from qaisu_model import aksiyon_oner
+    # Aksiyon
     aksiyon_tip, aksiyon_metin, risk_seviyesi = aksiyon_oner(
         anomali_skoru=anomali,
         isko_orani=isko,
         vir_kayit_var_mi=len(vir_gecmis) > 0,
-        optimize_edilmis_karar=str(row['OPTIMIZE_EDILMIS_KARAR']),
-        tedarikci_anomali=float(vir_gecmis[0]['A_i_Anomali_Skoru']) if vir_gecmis else None
+        optimize_edilmis_karar=str(row.get('OPTIMIZE_EDILMIS_KARAR', 'Kabul/OGK')),
+        tedarikci_anomali=float(vir_gecmis[0].get('A_i_Anomali_Skoru', 0)) if vir_gecmis else None
     )
 
     return render_template_string(HTML_KARAR, row=row, probs=probs, xai=xai, vir_gecmis=vir_gecmis,
@@ -873,6 +918,304 @@ def vir_override(vir_no):
             con.commit()
     return render_template_string(HTML_BASARILI, mesaj=f"VIR Override kaydedildi! Kararınız: {muhendis_karari}")
 
+@app.route('/dashboard')
+def dashboard():
+    engine = get_engine()
+    with engine.connect() as con:
+        df_udf = pd.read_sql('SELECT * FROM superset_udf_karar_raporu', con)
+        df_vir = pd.read_sql('SELECT * FROM superset_vir_risk_raporu', con)
+
+    udf_toplam = len(df_udf)
+    uyusmazlik = len(df_udf[df_udf['KARAR_UYUSMAZLIGI'] == 'Uyuşmazlık Var'])
+    opt_oran = round((uyusmazlik / udf_toplam) * 100) if udf_toplam > 0 else 0
+    isko_ort = round(float(df_udf['ISKO_ORANI'].mean()) * 100, 1) if 'ISKO_ORANI' in df_udf.columns else 0
+    vir_toplam = len(df_vir)
+
+    stats = {'udf_toplam': udf_toplam, 'uyusmazlik': uyusmazlik, 'opt_oran': opt_oran, 'isko_ort': isko_ort, 'vir_toplam': vir_toplam}
+
+    pie_data = {'labels': ['Uyuşuyor', 'Uyuşmazlık Var'], 'values': [int(udf_toplam - uyusmazlik), int(uyusmazlik)]}
+    gauge_data = {'value': float(isko_ort)}
+
+    kararlar = ['Hurda', 'Islah', 'Kabul/OGK', 'RTV', 'RU']
+    z = []
+    for insan in kararlar:
+        row_vals = []
+        for ai in kararlar:
+            count = len(df_udf[(df_udf['KSYM_SORUMLUSU_KARAR'] == insan) & (df_udf['OPTIMIZE_EDILMIS_KARAR'] == ai)])
+            row_vals.append(int(count))
+        z.append(row_vals)
+    heatmap_data = {'z': z, 'x': kararlar, 'y': kararlar}
+
+    if 'Tedarikçi' in df_vir.columns and 'A_i_Anomali_Skoru' in df_vir.columns:
+        ted_group = df_vir.groupby('Tedarikçi')['A_i_Anomali_Skoru'].mean().sort_values(ascending=False).head(20)
+        bar_data = {'tedarikci': list(ted_group.index), 'anomali': [round(float(v), 3) for v in ted_group.values]}
+    else:
+        bar_data = {'tedarikci': [], 'anomali': []}
+
+    return render_template_string(HTML_DASHBOARD, stats=stats, pie_data=pie_data,
+        gauge_data=gauge_data, heatmap_data=heatmap_data, bar_data=bar_data)
+
+
+
+
+HTML_ADMIN = """
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>QAISU — Admin Panel</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        .header { background: #1a1a2e; color: white; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .header a { color: #aaa; text-decoration: none; font-size: 13px; }
+        .container { max-width: 800px; margin: 30px auto; padding: 0 20px; }
+        .mod-toggle { display: flex; gap: 0; margin-bottom: 30px; background: white; border-radius: 10px; padding: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .mod-btn { flex: 1; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; color: #666; background: transparent; }
+        .mod-btn.active-dinamik { background: #27ae60; color: white; }
+        .mod-btn.active-statik { background: #e74c3c; color: white; }
+        .card { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card h2 { margin: 0 0 20px; font-size: 16px; color: #1a1a2e; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .dinamik-info { background: #e8f5e9; border-left: 4px solid #27ae60; padding: 15px; border-radius: 6px; margin-bottom: 20px; color: #1e8449; font-size: 14px; }
+        .slider-row { margin-bottom: 20px; }
+        .slider-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .slider-label { font-size: 14px; font-weight: bold; color: #333; }
+        .slider-value { font-size: 18px; font-weight: bold; color: #1a1a2e; }
+        input[type=range] { width: 100%; height: 8px; border-radius: 4px; outline: none; cursor: pointer; }
+        input[type=range]:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toplam-bar { background: #f0f0f0; border-radius: 8px; padding: 15px 20px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .toplam-ok { color: #27ae60; font-size: 24px; font-weight: bold; }
+        .toplam-hata { color: #e74c3c; font-size: 24px; font-weight: bold; }
+        .uyari { background: #fdecea; border: 1px solid #e74c3c; color: #c0392b; padding: 10px 15px; border-radius: 6px; font-size: 13px; margin-top: 10px; display: none; }
+        .btn-kaydet { width: 100%; padding: 16px; background: #1a1a2e; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        .btn-kaydet:disabled { background: #bbb; cursor: not-allowed; }
+        .agirlik-tablo { width: 100%; border-collapse: collapse; }
+        .agirlik-tablo td { padding: 10px 15px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .agirlik-tablo td:last-child { font-weight: bold; text-align: right; }
+        .guncelleme { font-size: 12px; color: #999; margin-top: 10px; text-align: right; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>⚙️ QAISU — Admin Ağırlık Yönetim Paneli</h1>
+    <a href="/">← Ana Sayfaya Dön</a>
+</div>
+<div class="container">
+    <div class="mod-toggle">
+        <button class="mod-btn {{ 'active-dinamik' if mod == 'dinamik' else '' }}" onclick="setMod('dinamik')">🧠 DİNAMİK (Öğrenen Mod)</button>
+        <button class="mod-btn {{ 'active-statik' if mod == 'statik' else '' }}" onclick="setMod('statik')">🔧 STATİK (Manuel Mod)</button>
+    </div>
+    <div class="card" id="dinamik-card" style="{{ '' if mod == 'dinamik' else 'display:none' }}">
+        <h2>🧠 Dinamik Mod — Mevcut Ağırlıklar</h2>
+        <div class="dinamik-info">✅ Sistem insan kararlarından öğrenerek ağırlıkları otomatik güncellemektedir. Her sabah 08:00 cron job son 30 günün override kayıtlarını analiz eder.</div>
+        <table class="agirlik-tablo">
+            <tr><td>⚖️ Maliyet (w1)</td><td>%{{ (weights.w1 * 100)|round|int }}</td></tr>
+            <tr><td>🤖 ML (w2)</td><td>%{{ (weights.w2 * 100)|round|int }}</td></tr>
+            <tr><td>⚠️ Risk (w3)</td><td>%{{ (weights.w3 * 100)|round|int }}</td></tr>
+            <tr><td>📊 Anomali (w4)</td><td>%{{ (weights.w4 * 100)|round|int }}</td></tr>
+            <tr><td>🏭 Tedarikçi (w5)</td><td>%{{ (weights.w5 * 100)|round|int }}</td></tr>
+        </table>
+        {% if weights.guncelleme_tarihi %}<div class="guncelleme">Son güncelleme: {{ weights.guncelleme_tarihi[:19] }}</div>{% endif %}
+    </div>
+    <div class="card" id="statik-card" style="{{ '' if mod == 'statik' else 'display:none' }}">
+        <h2>🔧 Statik Mod — Manuel Ağırlık Ayarı</h2>
+        <form method="POST" action="/admin/kaydet">
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">⚖️ Maliyet (w1)</span><span class="slider-value" id="val-w1">%{{ (weights.w1*100)|round|int }}</span></div>
+                <input type="range" name="w1" min="5" max="40" value="{{ (weights.w1*100)|round|int }}" oninput="updateSlider('w1',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">🤖 ML (w2)</span><span class="slider-value" id="val-w2">%{{ (weights.w2*100)|round|int }}</span></div>
+                <input type="range" name="w2" min="10" max="60" value="{{ (weights.w2*100)|round|int }}" oninput="updateSlider('w2',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">⚠️ Risk (w3)</span><span class="slider-value" id="val-w3">%{{ (weights.w3*100)|round|int }}</span></div>
+                <input type="range" name="w3" min="5" max="40" value="{{ (weights.w3*100)|round|int }}" oninput="updateSlider('w3',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">📊 Anomali (w4)</span><span class="slider-value" id="val-w4">%{{ (weights.w4*100)|round|int }}</span></div>
+                <input type="range" name="w4" min="5" max="40" value="{{ (weights.w4*100)|round|int }}" oninput="updateSlider('w4',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">🏭 Tedarikçi (w5)</span><span class="slider-value" id="val-w5">%{{ (weights.w5*100)|round|int }}</span></div>
+                <input type="range" name="w5" min="5" max="30" value="{{ (weights.w5*100)|round|int }}" oninput="updateSlider('w5',this.value)">
+            </div>
+            <div class="toplam-bar">
+                <span style="font-size:14px;color:#666">Toplam Ağırlık:</span>
+                <span class="toplam-ok" id="toplam-deger">%{{ ((weights.w1+weights.w2+weights.w3+weights.w4+weights.w5)*100)|round|int }}</span>
+            </div>
+            <div class="uyari" id="uyari-mesaj">⚠️ Toplam %100 olmalıdır!</div>
+            <button type="submit" class="btn-kaydet" id="btn-kaydet">💾 Ağırlıkları Kaydet</button>
+        </form>
+    </div>
+</div>
+<script>
+function setMod(m) {
+    fetch('/admin/mod', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mod:m})})
+    .then(function(){ window.location.reload(); });
+}
+function updateSlider(id, val) {
+    document.getElementById('val-'+id).textContent = '%'+val;
+    var t = ['w1','w2','w3','w4','w5'].reduce(function(s,k){
+        return s + parseInt(document.querySelector('input[name='+k+']').value);
+    }, 0);
+    var el = document.getElementById('toplam-deger');
+    var btn = document.getElementById('btn-kaydet');
+    var uyari = document.getElementById('uyari-mesaj');
+    el.textContent = '%'+t;
+    if(t===100){ el.className='toplam-ok'; btn.disabled=false; uyari.style.display='none'; }
+    else { el.className='toplam-hata'; btn.disabled=true; uyari.style.display='block'; }
+}
+</script>
+</body>
+</html>
+"""
+
+@app.route('/admin')
+def admin():
+    import json, os
+    weights_path = '/home/ubuntu/qaisu/models/dynamic_weights.json'
+    if os.path.exists(weights_path):
+        with open(weights_path) as f:
+            weights = json.load(f)
+    else:
+        weights = {'w1':0.10,'w2':0.40,'w3':0.20,'w4':0.20,'w5':0.10,'guncelleme_tarihi':None}
+    mod_path = '/home/ubuntu/qaisu/models/admin_mod.txt'
+    mod = open(mod_path).read().strip() if os.path.exists(mod_path) else 'dinamik'
+    return render_template_string(HTML_ADMIN, weights=weights, mod=mod)
+
+@app.route('/admin/mod', methods=['POST'])
+def admin_mod():
+    import json, os
+    data = request.get_json()
+    os.makedirs('/home/ubuntu/qaisu/models', exist_ok=True)
+    with open('/home/ubuntu/qaisu/models/admin_mod.txt','w') as f:
+        f.write(data.get('mod','dinamik'))
+    return jsonify({'ok':True})
+
+@app.route('/admin/kaydet', methods=['POST'])
+def admin_kaydet():
+    import json, os
+    w = {k: int(request.form.get(k,10))/100 for k in ['w1','w2','w3','w4','w5']}
+    w['guncelleme_tarihi'] = datetime.now().isoformat()
+    os.makedirs('/home/ubuntu/qaisu/models', exist_ok=True)
+    with open('/home/ubuntu/qaisu/models/dynamic_weights.json','w') as f:
+        json.dump(w, f)
+    with open('/home/ubuntu/qaisu/models/admin_mod.txt','w') as f:
+        f.write('statik')
+    return render_template_string(HTML_BASARILI, mesaj="Agirliklar kaydedildi!")
+
 if __name__ == '__main__':
     init_db()
     app.run(host='0.0.0.0', port=5000, debug=False)
+
+HTML_ADMIN = """
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>QAISU — Admin Panel</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f5f5f5; }
+        .header { background: #1a1a2e; color: white; padding: 20px 40px; display: flex; justify-content: space-between; align-items: center; }
+        .header h1 { margin: 0; font-size: 22px; }
+        .header a { color: #aaa; text-decoration: none; font-size: 13px; }
+        .container { max-width: 800px; margin: 30px auto; padding: 0 20px; }
+        .mod-toggle { display: flex; gap: 0; margin-bottom: 30px; background: white; border-radius: 10px; padding: 6px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .mod-btn { flex: 1; padding: 14px; border: none; border-radius: 8px; cursor: pointer; font-size: 15px; font-weight: bold; color: #666; background: transparent; }
+        .mod-btn.active-dinamik { background: #27ae60; color: white; }
+        .mod-btn.active-statik { background: #e74c3c; color: white; }
+        .card { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .card h2 { margin: 0 0 20px; font-size: 16px; color: #1a1a2e; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+        .dinamik-info { background: #e8f5e9; border-left: 4px solid #27ae60; padding: 15px; border-radius: 6px; margin-bottom: 20px; color: #1e8449; font-size: 14px; }
+        .slider-row { margin-bottom: 20px; }
+        .slider-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .slider-label { font-size: 14px; font-weight: bold; color: #333; }
+        .slider-value { font-size: 18px; font-weight: bold; color: #1a1a2e; }
+        input[type=range] { width: 100%; height: 8px; border-radius: 4px; outline: none; cursor: pointer; }
+        input[type=range]:disabled { opacity: 0.5; cursor: not-allowed; }
+        .toplam-bar { background: #f0f0f0; border-radius: 8px; padding: 15px 20px; margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .toplam-ok { color: #27ae60; font-size: 24px; font-weight: bold; }
+        .toplam-hata { color: #e74c3c; font-size: 24px; font-weight: bold; }
+        .uyari { background: #fdecea; border: 1px solid #e74c3c; color: #c0392b; padding: 10px 15px; border-radius: 6px; font-size: 13px; margin-top: 10px; display: none; }
+        .btn-kaydet { width: 100%; padding: 16px; background: #1a1a2e; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        .btn-kaydet:disabled { background: #bbb; cursor: not-allowed; }
+        .agirlik-tablo { width: 100%; border-collapse: collapse; }
+        .agirlik-tablo td { padding: 10px 15px; border-bottom: 1px solid #eee; font-size: 14px; }
+        .agirlik-tablo td:last-child { font-weight: bold; text-align: right; }
+        .guncelleme { font-size: 12px; color: #999; margin-top: 10px; text-align: right; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>⚙️ QAISU — Admin Ağırlık Yönetim Paneli</h1>
+    <a href="/">← Ana Sayfaya Dön</a>
+</div>
+<div class="container">
+    <div class="mod-toggle">
+        <button class="mod-btn {{ 'active-dinamik' if mod == 'dinamik' else '' }}" onclick="setMod('dinamik')">🧠 DİNAMİK (Öğrenen Mod)</button>
+        <button class="mod-btn {{ 'active-statik' if mod == 'statik' else '' }}" onclick="setMod('statik')">🔧 STATİK (Manuel Mod)</button>
+    </div>
+    <div class="card" id="dinamik-card" style="{{ '' if mod == 'dinamik' else 'display:none' }}">
+        <h2>🧠 Dinamik Mod — Mevcut Ağırlıklar</h2>
+        <div class="dinamik-info">✅ Sistem insan kararlarından öğrenerek ağırlıkları otomatik güncellemektedir. Her sabah 08:00'de çalışan cron job, son 30 günün override kayıtlarını analiz eder.</div>
+        <table class="agirlik-tablo">
+            <tr><td>⚖️ Maliyet (w1)</td><td>%{{ (weights.w1 * 100)|round|int }}</td></tr>
+            <tr><td>🤖 ML (w2)</td><td>%{{ (weights.w2 * 100)|round|int }}</td></tr>
+            <tr><td>⚠️ Risk (w3)</td><td>%{{ (weights.w3 * 100)|round|int }}</td></tr>
+            <tr><td>📊 Anomali (w4)</td><td>%{{ (weights.w4 * 100)|round|int }}</td></tr>
+            <tr><td>🏭 Tedarikçi (w5)</td><td>%{{ (weights.w5 * 100)|round|int }}</td></tr>
+        </table>
+        {% if weights.guncelleme_tarihi %}<div class="guncelleme">Son güncelleme: {{ weights.guncelleme_tarihi[:19] }}</div>{% endif %}
+    </div>
+    <div class="card" id="statik-card" style="{{ '' if mod == 'statik' else 'display:none' }}">
+        <h2>🔧 Statik Mod — Manuel Ağırlık Ayarı</h2>
+        <form method="POST" action="/admin/kaydet">
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">⚖️ Maliyet (w1)</span><span class="slider-value" id="val-w1">%{{ (weights.w1*100)|round|int }}</span></div>
+                <input type="range" name="w1" min="5" max="40" value="{{ (weights.w1*100)|round|int }}" oninput="updateSlider('w1',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">🤖 ML (w2)</span><span class="slider-value" id="val-w2">%{{ (weights.w2*100)|round|int }}</span></div>
+                <input type="range" name="w2" min="10" max="60" value="{{ (weights.w2*100)|round|int }}" oninput="updateSlider('w2',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">⚠️ Risk (w3)</span><span class="slider-value" id="val-w3">%{{ (weights.w3*100)|round|int }}</span></div>
+                <input type="range" name="w3" min="5" max="40" value="{{ (weights.w3*100)|round|int }}" oninput="updateSlider('w3',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">📊 Anomali (w4)</span><span class="slider-value" id="val-w4">%{{ (weights.w4*100)|round|int }}</span></div>
+                <input type="range" name="w4" min="5" max="40" value="{{ (weights.w4*100)|round|int }}" oninput="updateSlider('w4',this.value)">
+            </div>
+            <div class="slider-row">
+                <div class="slider-header"><span class="slider-label">🏭 Tedarikçi (w5)</span><span class="slider-value" id="val-w5">%{{ (weights.w5*100)|round|int }}</span></div>
+                <input type="range" name="w5" min="5" max="30" value="{{ (weights.w5*100)|round|int }}" oninput="updateSlider('w5',this.value)">
+            </div>
+            <div class="toplam-bar">
+                <span style="font-size:14px;color:#666">Toplam Ağırlık:</span>
+                <span class="toplam-ok" id="toplam-deger">%{{ ((weights.w1+weights.w2+weights.w3+weights.w4+weights.w5)*100)|round|int }}</span>
+            </div>
+            <div class="uyari" id="uyari-mesaj">⚠️ Toplam %100 olmalıdır!</div>
+            <button type="submit" class="btn-kaydet" id="btn-kaydet">💾 Ağırlıkları Kaydet</button>
+        </form>
+    </div>
+</div>
+<script>
+function setMod(m) {
+    fetch('/admin/mod', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({mod:m})})
+    .then(function(){ window.location.reload(); });
+}
+function updateSlider(id, val) {
+    document.getElementById('val-'+id).textContent = '%'+val;
+    var t = ['w1','w2','w3','w4','w5'].reduce(function(s,k){ return s + parseInt(document.querySelector('input[name='+k+']').value); }, 0);
+    var el = document.getElementById('toplam-deger');
+    var btn = document.getElementById('btn-kaydet');
+    var uyari = document.getElementById('uyari-mesaj');
+    el.textContent = '%'+t;
+    if(t===100){ el.className='toplam-ok'; btn.disabled=false; uyari.style.display='none'; }
+    else { el.className='toplam-hata'; btn.disabled=true; uyari.style.display='block'; }
+}
+</script>
+</body>
+</html>
+"""
